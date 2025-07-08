@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>USPTO Patent Search</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2em;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    form {
+      margin-bottom: 1em;
+    }
+    .results-wrapper {
+      flex: 1 1 auto; /* grow to fill remaining space */
+      display: flex;
+      flex-direction: column;
+    }
+    .scroll {
+      /* fill all remaining vertical space in .results-wrapper */
+      flex: 1 1 auto;
+      overflow-y: auto;
+      margin-top: .5em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: .5em;
+      text-align: left;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>USPTO Patent Search</h1>
+
+  <form method="post" action="/">
+    <label>Search:
+      <input
+        type="text"
+        name="search_term"
+        required
+        value="{{ search_term }}"
+        placeholder="App #, Patent #, Pub #, or asignee"
+      >
+    </label>
+    <button type="submit">Go</button>
+  </form>
+
+  {% if error %}
+    <p class="error">Error: {{ error }}</p>
+  {% endif %}
+
+  {# ─── Documents view ─── #}
+    
+  {% if documents %}
+    <p>
+      <a href="javascript:history.back()">&#8592; Return to results window</a>
+    </p>
+    <h2>PTAB Documents</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Filing Date</th>
+            <th>Document Type</th>
+            <th>Doc #</th>
+            <th>Document Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in documents %}
+            <tr>
+              <td>{{ d.filing_date }}</td>
+              <td>{{ d.document_type }}</td>
+              <td>
+                <a
+                  href="{{ url_for('download_doc', document_identifier=d.document_identifier) }}"
+                  target="_blank"
+                >
+                  {{ d.document_number }}
+                </a>
+              </td>
+              <td>{{ d.document_name }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  
+  {# ─── Search results view ─── #}
+  {% elif results %}
+    <div class="results-wrapper">
+      <h2>Search Results ({{ results|length }})</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Application #</th>
+              <th>Patent #</th>
+              <th>Filing Date</th>
+              <th>Assignee</th>
+              <th>Status</th>
+              <th>Title</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in results %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('home', application_number=r.application_number) }}">
+                    {{ r.application_number }}
+                  </a>
+                </td>
+                <td>
+                  <a href="{{ url_for('home', patent_number=r.patent_number) }}">
+                    {{ r.patent_number }}
+                  </a>
+                </td>
+                <td>{{ r.filing_date }}</td>
+                <td>{{ r.assignees }}</td>
+                <td>{{ r.status }}</td>
+                <td>{{ r.title }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  {# ─── Detail view ─── #}
+  {% elif patent %}
+    <section class="summary">
+      <h2>{{ patent.patent_number }}
+        
+         {{ patent.title }}
+      </h2>
+      <p>
+        <a
+          href="https://patents.google.com/patent/US{{ patent.patent_number }}"
+          target="_blank" rel="noopener"
+        >          
+        Google Patent Version</a>
+      </p>
+      <p>  
+        <a href="{{ url_for('uspto_pdf', patent_number=patent.patent_number) }}" target="_blank">
+    Download from USPTO
+        </a>
+      </p>
+
+
+      <p>
+        USPTO search:
+        <a
+          href="https://ppubs.uspto.gov/pubwebapp/static/pages/ppubsbasic.html"
+          target="_blank" rel="noopener"
+        >ppubs.uspto.gov</a>
+      </p>
+      <dl>
+        <dt>Application No.</dt>
+        <dd>
+          <a href="{{ url_for('home', application_number=patent.application_number) }}">
+            {{ patent.application_number }}
+          </a>
+        </dd>
+        <dt>Status</dt>
+        <dd>{{ patent.status }}</dd>
+        <dt>Filing Date</dt>
+        <dd>{{ patent.filing_date }}</dd>
+        <dt>Publication Date</dt>
+        <dd>{{ patent.publication_date or "N/A" }}</dd>
+        <dt>Publication Number</dt>
+        <dd>
+          <a href="{{ url_for('home', publication_number=patent.publication_number) }}">
+            {{ patent.publication_number or "N/A" }}
+          </a>
+        </dd>
+        <dt>Grant Date</dt>
+        <dd>{{ patent.grant_date or "—" }}</dd>
+        <dt>PTA Days</dt>
+        <dd>{{ patent.pta_days or "-" }}</dd>
+        <dt>Inventors</dt>
+        <dd>{{ patent.inventors | join(", ") }}</dd>
+        <dt>Assignees</dt>
+        <dd>
+          {% for a in patent.assignees %}
+            {% if a.pdf_url %}
+              <a href="{{ a.pdf_url }}" target="_blank">{{ a.name }}</a>
+            {% else %}
+              {{ a.name }}
+            {% endif %}
+            {%- if not loop.last %}, {% endif %}
+          {% endfor %}
+        </dd>
+      </dl>
+
+      {% if proceedings %}
+        <h2>PTAB Proceedings</h2>
+        <table class="events">
+          <thead>
+            <tr>
+              <th>Proceeding No.</th>
+              <th>Status</th>
+              <th>Petitioner Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in proceedings %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('home', proceeding_number=p.number) }}">
+                    {{ p.number }}
+                  </a>
+                </td>
+                <td>{{ p.status }}</td>
+                <td>{{ p.petitioner }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% if patent.parent_continuity or patent.child_continuity %}
+        <h2>Continuity</h2>
+        <table class="events">
+          <thead>
+            <tr>
+              <th>Relation</th>
+              <th>Application #</th>
+              <th>Patent #</th>
+              <th>Filing Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in patent.parent_continuity %}
+              <tr>
+                <td>Parent of {{ c.child_number }}</td>
+                <td>
+                  <a href="{{ url_for('home', application_number=c.parent_number) }}">
+                    {{ c.parent_number }}
+                  </a>
+                </td>
+                <td>
+                  <a href="{{ url_for('home', patent_number=c.parent_patent_number) }}">
+                    {{ c.parent_patent_number or "N/A" }}
+                  </a>
+                </td>
+                <td>{{ c.filing_date }}</td>
+                <td>{{ c.status }}</td>
+              </tr>
+            {% endfor %}
+            {% for c in patent.child_continuity %}
+              <tr>
+                <td>Child of {{ c.parent_number }}</td>
+                <td>
+                  <a href="{{ url_for('home', application_number=c.child_number) }}">
+                    {{ c.child_number }}
+                  </a>
+                </td>
+                <td>
+                  <a href="{{ url_for('home', patent_number=c.child_patent_number) }}">
+                    {{ c.child_patent_number or "N/A" }}
+                  </a>
+                </td>
+                <td>{{ c.filing_date }}</td>
+                <td>{{ c.status }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% if events %}
+        <h3>FH Events (May not be complete)</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Description</th></tr></thead>
+            <tbody>
+              {% for ev in events %}
+                <tr>
+                  <td>{{ ev.eventDate }}</td>
+                  <td>{{ ev.eventDescriptionText }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+*.tar
+uspto_pdf_cache/
+uspto_tar_cache/
+*.log
