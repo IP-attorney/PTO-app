@@ -1,0 +1,13 @@
+<!-- templates/choose_pdf.html -->
+<!doctype html>
+<html>
+<head><title>PDF Available</title></head>
+<body>
+<h2>PDF for {{ patent_number }} available</h2>
+<p>You can download the raw version or request OCR:</p>
+<form action="{{ url_for('choose_pdf_action', patent_number=patent_number) }}" method="post">
+  <button type="submit" name="choice" value="ocr">🔍 OCR and Download</button>
+  <button type="submit" name="choice" value="raw">📥 Download Raw PDF</button>
+</form>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Generating Searchable PDF…</title>
+
+  {% if ready %}
+    <meta http-equiv="refresh" content="0; url={{ url_for('download_pdf', patent_number=patent_number) }}">
+  {% elif log and "📥 Raw PDF downloaded" in log and "🔧 Starting OCR processing" not in log %}
+    <meta http-equiv="refresh" content="0; url={{ url_for('uspto_pdf', patent_number=patent_number) }}">
+  {% else %}
+    <meta http-equiv="refresh" content="5">
+  {% endif %}
+
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2em;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      font-size: 1.5em;
+    }
+    #ocr-status {
+      font-family: monospace;
+      background: #f4f4f4;
+      padding: 1em;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap;
+      max-height: 50vh;
+      overflow-y: auto;
+      margin-top: 1em;
+    }
+    .success {
+      color: green;
+      font-weight: bold;
+      margin-top: 1em;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+      margin-top: 1em;
+    }
+    .note {
+      font-size: 0.9em;
+      color: #666;
+    }
+    #progress-bar-container {
+      width: 100%;
+      background: #eee;
+      border: 1px solid #ccc;
+      height: 20px;
+      margin-top: 1em;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: green;
+      transition: width 0.5s ease;
+    }
+    #step-text {
+      font-size: 0.95em;
+      margin-top: 0.5em;
+    }
+  </style>
+
+  <script>
+    function estimateProgressFromLog(logText) {
+      const match = logText.match(/(\d{1,3})%\s+complete/);
+      if (match) return parseInt(match[1]);
+      if (logText.includes("✅ OCR complete")) return 100;
+      if (logText.includes("🔧 Starting OCR processing")) return 5;
+      return 0;
+    }
+
+    function extractCurrentStep(logText) {
+      const lines = logText.trim().split("\n").reverse();
+      for (const line of lines) {
+        if (/Page \d+ of \d+/.test(line)) {
+          return line.trim();  // e.g. "Page 4 of 10, 27% complete"
+        }
+      }
+      if (logText.includes("✅ OCR complete")) return "✅ Finished.";
+      if (logText.includes("🔧 Starting OCR processing")) return "🔧 Starting OCR...";
+      return "⌛ Waiting for progress...";
+    }
+
+    function updateProgress() {
+      const logEl = document.getElementById("ocr-status");
+      const progress = estimateProgressFromLog(logEl.innerText);
+      document.getElementById("progress-bar").style.width = progress + "%";
+      document.getElementById("progress-percent").innerText = progress + "%";
+      document.getElementById("step-text").innerText = extractCurrentStep(logEl.innerText);
+    }
+
+    setInterval(updateProgress, 1000);
+  </script>
+</head>
+<body>
+  <h1>Creating Searchable PDF for US{{ patent_number }}</h1>
+
+  <p class="note">This may take a bit. Please wait.</p>
+
+  {% if log and "✅" in log %}
+    <p class="success">
+      ✅ Done! Redirecting…<br>
+      If you are not redirected automatically, <a href="/uspto_pdf/{{ patent_number }}">click here</a>.
+    </p>
+  {% elif log and "❌" in log %}
+    <p class="error">❌ Something went wrong during OCR.</p>
+  {% endif %}
+</body>
+</html>
