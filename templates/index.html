@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eliot's Patent Search</title>
+  <style>
+  body {
+    font-family: sans-serif;
+    margin: 2em;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .page-container {
+    max-width: 1000px;
+    margin: auto;
+    width: 100%;
+    padding: 1em;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    margin-bottom: 1em;
+  }
+
+  input[type="text"],
+  button {
+    font-size: 1em;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.5em;
+  }
+
+  .results-wrapper {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    margin-top: 0.5em;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    border: 1px solid #ccc;
+    padding: 0.5em;
+    text-align: left;
+  }
+
+  .error {
+    color: red;
+  }
+
+  a + a {
+    margin-left: 1em;
+  }
+
+  @media (min-width: 601px) {
+    form {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    input[type="text"] {
+      flex: 1;
+    }
+
+    button {
+      width: auto;
+    }
+  }
+
+  @media (max-width: 600px) {
+    body {
+      margin: 1em;
+    }
+
+    input[type="text"],
+    button {
+      width: 100%;
+    }
+  }
+</style>
+
+
+</head>
+<body>
+  <div class="page-container">
+
+    <h1>
+      Eliot's Patent Search
+    </h1>
+
+    <form method="post" action="/">
+      <label>Search:
+        <input type="text" name="search_term" required value="{{ search_term }}" placeholder="Patent #, Pub #, assignee, IPR#, etc.">
+      </label>
+      <button type="submit">Go</button>
+    </form>
+
+    {% if not results and not patent_info and not proceedings and not error %}
+      <div class="empty-state">
+        <h2>Welcome to Eliot's USPTO API Search Engine</h2>
+        <p>Start by entering a PTAB docket number, party name, patent, publication, or application number above.</p>
+        <p>Note: The app will recursively search for potential family members.  For complex families, the search results may take several seconds.</p>
+      </div>
+    {% endif %}
+
+
+    {% if error %}
+    <div>
+        <p class="error">Error: {{ error }}</p>
+    </div>
+    {% endif %}
+
+    {% if patent %}
+      <section class="summary">
+        <h2>
+            {{ patent.patent_number or "No Patent Number" }}:
+            {% if patent.patent_number and (patent.patent_number.startswith("WO") or patent.patent_number.startswith("PCT")) %}
+                (PCT)
+            {% endif %}
+            {{ patent.title or "Untitled" }}
+        </h2>
+        <p>
+          {% if patent.patent_number %}
+            {% if patent.patent_number.startswith("WO") or patent.patent_number.startswith("PCT") %}
+              <a href="https://patentscope.wipo.int/search/en/detail.jsf?docId={{ patent.patent_number }}" target="_blank" rel="noopener">View on WIPO</a> |
+              <a href="https://patents.google.com/patent/{{ patent.patent_number }}" target="_blank" rel="noopener">Google Patent</a>
+            {% else %}
+              <a href="{{ url_for('uspto_pdf', patent_number=patent.patent_number) }}" target="_blank">Download from USPTO</a> |
+              <a href="https://patents.google.com/patent/US{{ patent.patent_number }}" target="_blank" rel="noopener">Google Patent</a>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">PDF not available</span>
+          {% endif %}
+        </p>
+
+        <p>USPTO search: <a href="https://ppubs.uspto.gov/pubwebapp/static/pages/ppubsbasic.html" target="_blank" rel="noopener">ppubs.uspto.gov</a></p>
+
+        <dl>
+          <dt>Application No.</dt>
+          <dd><a href="{{ url_for('home', application_number=patent.application_number) }}">{{ patent.application_number or "—" }}</a></dd>
+          <dt>Status</dt>
+          <dd>{{ patent.status or "—" }}</dd>
+          <dt>Filing Date</dt>
+          <dd>{{ patent.filing_date or "—" }}</dd>
+          <dt>Publication Date</dt>
+          <dd>{{ patent.publication_date or "—" }}</dd>
+          <dt>Publication Number</dt>
+          <dd>
+            {% if patent.publication_number and patent.publication_number.startswith("WO") %}
+              <a href="https://patents.google.com/patent/{{ patent.publication_number }}" target="_blank">
+                {{ patent.publication_number }} (WO/PCT)
+              </a>
+            {% else %}
+              <a href="{{ url_for('home', publication_number=patent.publication_number) }}">
+                {{ patent.publication_number or "N/A" }}
+              </a>
+            {% endif %}
+          </dd>
+          <dt>Grant Date</dt>
+          <dd>{{ patent.grant_date or "—" }}</dd>
+          <dt>PTA Days</dt>
+          <dd>{{ patent.pta_days or "—" }}</dd>
+          <dt>Inventors</dt>
+          <dd>{{ patent.inventors | join(", ") if patent.inventors else "—" }}</dd>
+          <dt>Assignees</dt>
+          <dd>
+            {% for a in patent.assignees %}
+              {% if a.pdf_url %}
+                <a href="{{ a.pdf_url }}" target="_blank">{{ a.name }}</a>
+              {% else %}
+                {{ a.name }}
+              {% endif %}
+              {% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </dd>
+        </dl>
+      </section>
+    {% endif %}
+
+    {% if proceedings %}
+    <section>  
+      <h2>
+        PTAB Proceedings{% if patent and patent.patent_number %} for Patent Number: {{ patent.patent_number }}{% endif %}
+      </h2>
+
+      <div class="scroll">
+        <table class="events">
+          <thead>
+            <tr>
+              <th>Proceeding No.</th>
+              <th>Status</th>
+              <th>Filing Date</th>
+              <th>Petitioner</th>
+              <th>Patent Owner</th>
+              <th>Patent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in proceedings %}
+              <tr>
+                <td>
+                  {% if p.number %}
+                    <a href="{{ url_for('home', proceeding_number=p.number) }}">{{ p.number }}</a>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ p.status or "—" }}</td>
+                <td>{{ p.filing_date or "—" }}</td>
+                <td>{{ p.petitioner or "—" }}</td>
+                <td>{{ p.ptab_patent_owner or "—" }}</td>
+                <td> {% if p.ptab_patent_number %}
+                    <a href="{{ url_for('home', patent_number=p.ptab_patent_number) }}">{{ p.ptab_patent_number }}</a>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if documents %}
+      <p><a href="javascript:history.back()">&#8592; Return to results window</a></p>
+      <h2>PTAB Documents</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Filing Date</th>
+              <th>Document Type</th>
+              <th>Doc #</th>
+              <th>Document Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in documents %}
+              <tr>
+                <td>{{ d.filing_date or "—" }}</td>
+                <td>{{ d.document_type or "—" }}</td>
+                <td>
+                  {% if d.document_identifier %}
+                    <a href="{{ url_for('download_doc', document_identifier=d.document_identifier) }}" target="_blank">
+                      {{ d.document_number or "—" }}
+                    </a>
+                  {% else %}
+                    {{ d.document_number or "—" }}
+                  {% endif %}
+                </td>
+                <td>{{ d.document_name or "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if patent and (patent.parent_continuity or patent.child_continuity) %}
+    <section>
+      <h2>Continuity</h2>
+      <table class="events">
+        <thead><tr><th>Relation</th><th>Application #</th><th>Patent #</th><th>Filing Date</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for c in patent.parent_continuity %}
+            <tr>
+              <td>Parent of {{ c.child_number or "—" }}</td>
+              <td>
+                {% if c.parent_number %}
+                  <a href="{{ url_for('home', application_number=c.parent_number) }}">{{ c.parent_number }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if c.parent_patent_number %}
+                  <a href="{{ url_for('home', patent_number=c.parent_patent_number) }}">{{ c.parent_patent_number }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ c.filing_date or "—" }}</td>
+              <td>{{ c.status or "—" }}</td>
+            </tr>
+          {% endfor %}
+          {% for c in patent.child_continuity %}
+            <tr>
+              <td>Child of {{ c.parent_number or "—" }}</td>
+              <td>
+                {% if c.child_number %}
+                  <a href="{{ url_for('home', application_number=c.child_number) }}">{{ c.child_number }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if c.child_patent_number %}
+                  <a href="{{ url_for('home', patent_number=c.child_patent_number) }}">{{ c.child_patent_number }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ c.filing_date or "—" }}</td>
+              <td>{{ c.status or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    {% if family_members %}
+    <section>
+      <h2>All Potential Family Members</h2>
+
+
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Application</th>
+              <th>Patent</th>
+              <th>Title</th>
+              <th>Filing Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in family_members %}
+            <tr>
+              <td>
+                {% if member.application_number %}
+                <a href="/?application_number={{ member.application_number }}">{{ member.application_number }}</a>
+                {% else %} — {% endif %}
+              </td>
+              <td>
+                {% if member.patent_number %}
+                <a href="/?patent_number={{ member.patent_number }}">{{ member.patent_number }}</a>
+                {% else %} — {% endif %}
+              </td>
+              <td>{{ member.title }}</td>
+              <td>{{ member.filing_date or "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+
+    {% if results %}
+      <div class="results-wrapper">
+        <h2>Search Results ({{ results|length }})</h2>
+        <form method="post" action="{{ url_for('csv_download') }}">
+          <input type="hidden" name="search_term" value="{{ search_term }}">  
+          <button type="submit" class="btn btn-secondary">Export all to CSV (search will be re-run in background)</button>
+        </form>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Application #</th>
+                <th>Patent #</th>
+                <th>Filing Date</th>
+                <th>Assignee</th>
+                <th>Status</th>
+                <th>Title</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in results %}
+                <tr>
+                  <td>
+                    {% if r.application_number %}
+                      <a href="{{ url_for('home', application_number=r.application_number) }}">{{ r.application_number }}</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if r.patent_number %}
+                      <a href="{{ url_for('home', patent_number=r.patent_number) }}">{{ r.patent_number }}</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td>{{ r.filing_date or "—" }}</td>
+                  <td>{{ r.assignees or "—" }}</td>
+                  <td>{{ r.status or "—" }}</td>
+                  <td>{{ r.title or "—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+      
+    {% if events %}
+    <section class="events">
+        <h3>File History Events</h3>
+        <div class="scroll">
+        <table>
+            <thead><tr><th>Date</th><th>Description</th></tr></thead>
+            <tbody>
+            {% for ev in events %}
+                <tr>
+                <td>{{ ev.eventDate }}</td>
+                <td>{{ ev.eventDescriptionText }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+    {% endif %}
+
+      <script src="https://unpkg.com/tablesort@5.2.1/dist/tablesort.min.js"></script>
+    <script>
+      // Automatically apply to all tables
+      document.querySelectorAll("table").forEach(function(table) {
+        new Tablesort(table);
+      });
+    </script>
+</div>
+</body>
+</html>
+

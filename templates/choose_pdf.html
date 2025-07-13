@@ -1,0 +1,76 @@
+<!-- templates/choose_pdf.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Available</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2em;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      font-size: 1.4em;
+      text-align: center;
+      margin-bottom: 1em;
+    }
+
+    p {
+      text-align: center;
+      margin-bottom: 1.5em;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      width: 100%;
+    }
+
+    button {
+      font-size: 1em;
+      padding: 0.75em;
+      border: none;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    button[name="choice"][value="ocr"] {
+      background-color: #007bff;
+      color: white;
+    }
+
+    button[name="choice"][value="raw"] {
+      background-color: #6c757d;
+      color: white;
+    }
+
+    @media (min-width: 500px) {
+      form {
+        flex-direction: row;
+        justify-content: center;
+      }
+
+      button {
+        width: 200px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>PDF for {{ patent_number }} Available</h2>
+  <p>You can download the raw version or request OCR:</p>
+  <form action="{{ url_for('choose_pdf_action', patent_number=patent_number) }}" method="post">
+    <button type="submit" name="choice" value="ocr">🔍 OCR and Download</button>
+    <button type="submit" name="choice" value="raw">📥 Download Raw PDF</button>
+  </form>
+</body>
+</html>

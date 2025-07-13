@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Let's slow your roll</title>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 2em;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  h2 {
+    font-size: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  p {
+    margin: 0.5em 0;
+  }
+
+  form {
+    margin: 1em 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+  }
+
+  button {
+    font-size: 1em;
+    padding: 0.6em;
+    cursor: pointer;
+  }
+
+  .btn-danger {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+  }
+
+  .btn-secondary {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+  }
+
+  ul {
+    padding-left: 1.2em;
+    margin-top: 1em;
+  }
+
+  li {
+    margin: 0.3em 0;
+  }
+
+  a {
+    display: inline-block;
+    margin-top: 1em;
+    color: #007bff;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 600px) {
+    body {
+      margin: 1em;
+    }
+
+    button {
+      width: 100%;
+    }
+
+    form {
+      width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+
+
+<h2>Large Search Detected</h2>
+<p>Your search matched <strong>{{ total }}</strong> applications.</p>
+<p>This may take a long time to load. Here's a preview of the first page:</p>
+
+<form method="post" action="{{ url_for('home') }}">
+  <input type="hidden" name="search_term" value="{{ search_term }}">
+  <input type="hidden" name="confirm_large" value="true">
+  <button type="submit" class="btn btn-danger">Yes, load all {{ total }} results</button>
+</form>
+
+<form method="post" action="{{ url_for('csv_download') }}">
+  <input type="hidden" name="search_term" value="{{ search_term }}">  
+  <button type="submit" class="btn btn-secondary">Export all to CSV (this still takes a long time)</button>
+</form>
+
+<p><a href="{{ url_for('home') }}">Cancel</a></p>
+<ul>
+  {% for r in preview %}
+    <li>
+      {{ r.applicationNumberText }} — {{ r.applicationMetaData.inventionTitle or "(No title)" }}
+    </li>
+  {% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('home') }}">
+  <input type="hidden" name="search_term" value="{{ search_term }}">
+  <input type="hidden" name="confirm_large" value="true">
+  <button type="submit" class="btn btn-danger">Yes, load all {{ total }} results</button>
+</form>
+
+<form method="post" action="{{ url_for('csv_download') }}">
+  <input type="hidden" name="search_term" value="{{ search_term }}">  
+  <button type="submit" class="btn btn-secondary">Export all to CSV (this still takes a long time)</button>
+</form>
+
+<p><a href="{{ url_for('home') }}">Cancel</a></p>
+</body>
+</html>

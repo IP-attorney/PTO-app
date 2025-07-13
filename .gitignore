@@ -1,0 +1,11 @@
+__pycache__/
+API_KEY.txt
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+*.tar
+uspto_pdf_cache/
+uspto_tar_cache/
+*.log
