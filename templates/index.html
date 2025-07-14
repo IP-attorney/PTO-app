@@ -12,6 +12,15 @@
     flex-direction: column;
     height: 100vh;
   }
+.table-filter {
+  margin-bottom: 0.5em;
+  padding: 0.4em;
+  width: 100%;
+  max-width: 300px;
+  font-size: 1em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
 
   .page-container {
     max-width: 1000px;
@@ -93,12 +102,10 @@
     }
   }
 </style>
-
-
 </head>
 <body>
   <div class="page-container">
-
+    
     <h1>
       Eliot's Patent Search
     </h1>
@@ -199,6 +206,8 @@
       </h2>
 
       <div class="scroll">
+        <input type="text" class="table-filter" placeholder="Search this table…">
+
         <table class="events">
           <thead>
             <tr>
@@ -242,6 +251,8 @@
       <p><a href="javascript:history.back()">&#8592; Return to results window</a></p>
       <h2>PTAB Documents</h2>
       <div class="scroll">
+        <input type="text" class="table-filter" placeholder="Search this table…">
+
         <table>
           <thead>
             <tr>
@@ -276,6 +287,8 @@
     {% if patent and (patent.parent_continuity or patent.child_continuity) %}
     <section>
       <h2>Continuity</h2>
+      <input type="text" class="table-filter" placeholder="Search this table…">
+
       <table class="events">
         <thead><tr><th>Relation</th><th>Application #</th><th>Patent #</th><th>Filing Date</th><th>Status</th></tr></thead>
         <tbody>
@@ -330,6 +343,7 @@
     <section>
       <h2>All Potential Family Members</h2>
 
+        <input type="text" class="table-filter" placeholder="Search this table…">
 
         <table class="table table-sm">
           <thead>
@@ -371,6 +385,8 @@
           <button type="submit" class="btn btn-secondary">Export all to CSV (search will be re-run in background)</button>
         </form>
         <div class="scroll">
+            <input type="text" class="table-filter" placeholder="Search this table…">
+
           <table>
             <thead>
               <tr>
@@ -415,6 +431,8 @@
     <section class="events">
         <h3>File History Events</h3>
         <div class="scroll">
+            <input type="text" class="table-filter" placeholder="Search this table…">
+
         <table>
             <thead><tr><th>Date</th><th>Description</th></tr></thead>
             <tbody>
@@ -429,15 +447,32 @@
         </div>
     </section>
     {% endif %}
+     
 
-      <script src="https://unpkg.com/tablesort@5.2.1/dist/tablesort.min.js"></script>
+    <!-- Add Tablesort script -->
+    <script src="https://unpkg.com/tablesort@5.2.1/dist/tablesort.min.js"></script>
     <script>
-      // Automatically apply to all tables
-      document.querySelectorAll("table").forEach(function(table) {
-        new Tablesort(table);
+      document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("table").forEach(function (table) {
+          new Tablesort(table);
+        });
       });
     </script>
-</div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll(".table-filter").forEach(function (input) {
+            const table = input.nextElementSibling;
+            input.addEventListener("input", function () {
+            const filter = input.value.toLowerCase();
+            const rows = table.querySelectorAll("tbody tr");
+            rows.forEach(function (row) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(filter) ? "" : "none";
+            });
+            });
+        });
+        });
+    </script>
+  </div>
 </body>
 </html>
-

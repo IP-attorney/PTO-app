@@ -1,0 +1,7 @@
+Not yet fixed:
+1/ asnyc processing of PDF and OCR
+    -Offload  current download + OCR task to a Thread or Celery worker
+    -Immediately return a progress page with polling
+    -Store progress logs in a file or memory
+    -Client polls /progress/<patent_number> every few seconds
+    -When PDF download or OCR is done, redirect to the cached PDF

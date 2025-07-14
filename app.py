@@ -665,7 +665,6 @@ def fetch_all_pages(q, fields=None, limit=1000):
 
     return  (total, all_pfws)
 
-
 #Retreives list of PTAB documents for a given proceeding and populates them in returned docs
 def get_ptab_documents(proceeding_number):
     """
@@ -992,7 +991,6 @@ def csv_download():
 # MISC Helper Functions
 
 # ✅ PATCH: Replace gather_family_tree to use new continuity endpoint with improved error handling and bag caching
-
 def gather_family_tree(start_app_number, seen=None, depth=0, max_depth=40):
     """
     Recursively walks continuity tree using the dedicated USPTO continuity API:
@@ -1078,87 +1076,6 @@ def gather_family_tree(start_app_number, seen=None, depth=0, max_depth=40):
 
     return seen
 
-
-# def gather_family_tree(start_app_number, seen=None, depth=0, max_depth=50):
-#     """
-#     Recursively walks continuity tree using the dedicated USPTO continuity API:
-#     GET /patent/applications/[application_number]/continuity
-#     Returns a dict: {app_number: {"parents": [...], "children": [...]}}
-#     """
-#     if seen is None:
-#         seen = {}
-
-#     if depth > max_depth:
-#         raise RecursionError(f"🔁 Max depth {max_depth} exceeded while traversing from {start_app_number}")
-
-#     if start_app_number in seen:
-#         return seen
-
-#     url = f"https://api.uspto.gov/api/v1/patent/applications/{start_app_number}/continuity"
-#     headers = {
-#         "accept": "application/json",
-#         "X-API-KEY": API_KEY,
-#     }
-
-#     max_retries = 4
-#     delay = 1
-
-#     for attempt in range(max_retries):
-#         try:
-#             print(f"Checking: {url}")
-#             resp = requests.get(url, headers=headers, timeout=(5, 30))
-#             resp.raise_for_status()
-#             break
-#         except requests.HTTPError as e:
-#             if resp.status_code == 429:
-#                 print(f"⚠️ Rate limited on {start_app_number}, sleeping {delay}s")
-#                 time.sleep(delay)
-#                 delay *= 2
-#                 continue
-#             elif resp.status_code == 404:
-#                 print(f"⚠️ Application {start_app_number} not found, skipping.")
-#                 seen[start_app_number] = {"parents": [], "children": []}  # ✅ cache not found
-#                 return seen
-#             raise
-#         except Exception as e:
-#             print(f"⚠️ Error in gather_family_tree({start_app_number}): {e}")
-#             raise
-#     else:
-#         raise Exception(f"❌ Failed to fetch continuity for {start_app_number} after {max_retries} attempts")
-
-#     data = resp.json()
-#     bags = data.get("patentFileWrapperDataBag", [])
-#     if not bags:
-#         seen[start_app_number] = {"parents": [], "children": []}
-#         return seen
-
-#     bag = bags[0]
-#     parents = bag.get("parentContinuityBag", [])
-#     children = bag.get("childContinuityBag", [])
-
-#     seen[start_app_number] = {
-#         "parents": parents,
-#         "children": children,
-#     }
-
-#     # Recursively explore parents and children
-#     for rel in parents:
-#         app_no = rel.get("parentApplicationNumberText")
-#         if app_no and app_no not in seen:
-#             gather_family_tree(app_no, seen, depth + 1, max_depth)
-
-#     for rel in children:
-#         app_no = rel.get("childApplicationNumberText")
-#         if app_no and app_no not in seen:
-#             gather_family_tree(app_no, seen, depth + 1, max_depth)
-
-#     if depth == 0:
-#         print(f"✅ Finished family tree for {start_app_number}, total apps collected: {len(seen)}")
-
-#     return seen
-
-
-
 def sort_family_members(members):
     def sort_key(member):
         app_num = member.get("application_number", "")
@@ -1170,8 +1087,6 @@ def sort_family_members(members):
         except Exception:
             return (0, float("inf"))
     return sorted(members, key=sort_key)
-
-
 
 def extract_progress(log_text):
     # Look for last occurrence of "NN%" (e.g., 65%) in the log
