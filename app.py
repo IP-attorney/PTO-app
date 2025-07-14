@@ -1,14 +1,19 @@
 # app.py
-# Copyright (c) 2025, Eliot D. Williams
+
+# # Copyright (c) 2025, Eliot D. Williams
 # This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
 
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU Affero General Public License for more details.
+
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os, requests, threading
 import re
 import time
@@ -157,19 +162,36 @@ def home():
                             #print(f"Returned from extract")
 
                             # 🧬 Recursively build family tree
+                            #print("Calling gather_family_tree now:")
                             family_tree = gather_family_tree(patent_info.get("application_number"))
-                            family_members = []
 
-                            for app_no, pfw_entry in family_tree.items():
+
+                            family_members = []
+                            for app_no in family_tree:
                                 if app_no == patent_info.get("application_number"):
-                                    continue  # skip self
-                                meta = pfw_entry.get("applicationMetaData", {})
-                                family_members.append({
-                                    "application_number": app_no,
-                                    "patent_number": meta.get("patentNumber", ""),
-                                    "title": meta.get("inventionTitle", "(No Title)"),
-                                    "filing_date": meta.get("filingDate", ""),
-                                })
+                                    continue  # Skip self
+
+                                try:
+                                    print(f"Fetching pages for {app_no}")
+                                    total, pfws = fetch_all_pages(f"applicationNumberText:{app_no}", limit=1)
+
+                                    # Defensive checks
+                                    if pfws and isinstance(pfws, list) and isinstance(pfws[0], dict):
+                                        pfw = pfws[0]
+                                        patent_info_entry, _, _ = extract_patent_details(pfw)
+                                        family_members.append({
+                                            "application_number": app_no,
+                                            "patent_number": patent_info_entry.get("patent_number", ""),
+                                            "title": patent_info_entry.get("title", "(No Title)"),
+                                            "filing_date": patent_info_entry.get("filing_date", "—"),
+                                        })
+                                    else:
+                                        print(f"⚠️ No valid PFW data returned for {app_no}: pfws={pfws}")
+                                except Exception as e:
+                                    print(f"⚠️ Could not extract details for {app_no}: {e}")
+
+                          
+                  
 
                         except Exception as e:
                             print(f"Failed to extract details from USPTO hit: {e}")
@@ -267,22 +289,24 @@ def unstructured_search(search_term, confirm_large):
             "applicationMetaData.inventionTitle",
             "applicationMetaData.patentNumber"
         ]
-        # Fetch search results. Get first 100 only unless confirm/csv already set by user
-        fetch_one = not confirm_large 
+        # Determine result cap based on whether user has confirmed they want all results
+        limit = None if confirm_large else 1000
+
+        # Fetch results: either capped at 1000 or full set if confirmed
         total, pfws = fetch_all_pages(
             search_term,
             fields=fields,
-            limit=100,
-            fetch_one_page_only=fetch_one
+            limit=limit
         )
-        
-        #Bail out if over 1000 hits and and user hasn't asked for them all yet
+
+        # If more than 1000 total and user hasn't confirmed, show preview + confirm prompt
         if total > 1000 and not confirm_large:
-            return "confirm_large_results.html" , { 
+            return "confirm_large_results.html", {
                 "total": total,
                 "preview": pfws[:100],
-                "search_term": search_term}                
-        
+                "search_term": search_term
+            }
+
         
         # If we narrowed down to single (or no) hit, try to get PTAB info
         if total < 2:
@@ -304,21 +328,36 @@ def unstructured_search(search_term, confirm_large):
             if total == 1:
                 pfw = pfws[0]
                 patent_info, events, _ = extract_patent_details(pfw)
+                print("running family tree")
                 family_tree = gather_family_tree(patent_info.get("application_number"))
-                family_members = []
-
-                for app_no, pfw_entry in family_tree.items():
-                    if app_no == patent_info.get("application_number"):
-                        continue  # skip self
-                    meta = pfw_entry.get("applicationMetaData", {})
-                    family_members.append({
-                        "application_number": app_no,
-                        "patent_number": meta.get("patentNumber", ""),
-                        "title": meta.get("inventionTitle", "(No Title)"),
-                        "filing_date": meta.get("filingDate", ""),
-                    })
+                print("returned from family tree call")
                 
+                family_members = []
+                for app_no in family_tree:
+                    if app_no == patent_info.get("application_number"):
+                        continue  # Skip self
 
+                    try:
+                        print(f"Fetching pages for {app_no}")
+                        total, pfws = fetch_all_pages(f"applicationNumberText:{app_no}", limit=1)
+
+                        # Defensive checks
+                        if pfws and isinstance(pfws, list) and isinstance(pfws[0], dict):
+                            pfw = pfws[0]
+                            patent_info_entry, _, _ = extract_patent_details(pfw)
+                            family_members.append({
+                                "application_number": app_no,
+                                "patent_number": patent_info_entry.get("patent_number", ""),
+                                "title": patent_info_entry.get("title", "(No Title)"),
+                                "filing_date": patent_info_entry.get("filing_date", "—"),
+                            })
+                        else:
+                            print(f"⚠️ No valid PFW data returned for {app_no}: pfws={pfws}")
+                    except Exception as e:
+                        print(f"⚠️ Could not extract details for {app_no}: {e}")
+
+
+  
             # If extract failed or patent_info is missing key info, fill from PTAB if available
             if not patent_info:
                 patent_info = {}
@@ -471,7 +510,9 @@ def ptab_structured_search(proceeding_number):
     #events: prosecution events in search results
     #proceedings: list of PTAB proceedings (if a patent# or app# is in pwf)
 def extract_patent_details(pfw):
+    #print(f"Started extract")
     meta = pfw.get("applicationMetaData", {})
+    #print(f"Got applicationMetaData")
 
     app_type = meta.get("applicationTypeCategory", "").upper()
     is_pct = app_type == "PCT"
@@ -484,11 +525,12 @@ def extract_patent_details(pfw):
         meta.get("pctPublicationNumber") or
         "Patent # not found"
     )
+    #print(f"Got patent#: {patent_number}")
 
     application_number = (
         pfw.get("applicationNumberText") or "Application # not found"
     )
-
+    #print("Filling patent_info")
     patent_info = {
         "patent_number": patent_number,
         "title": meta.get("inventionTitle") or "(No Title)",
@@ -549,8 +591,9 @@ def extract_patent_details(pfw):
 
 # Incrementally request all search hits based on passed query q
 # Returns the hits in pfws and total = count of the hits, 0 if none
-def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
-    page_size = min(limit or 100, 100)
+def fetch_all_pages(q, fields=None, limit=1000):
+    #Max page_size in current USPTO API is 100
+    page_size = 100
     offset = 0
     all_pfws = []
     headers = {
@@ -561,9 +604,13 @@ def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
     max_retries = 4
 
     while True:
+        # Adjust page_size to not exceed remaining needed if limit is set
+        actual_limit = limit - len(all_pfws) if limit is not None else page_size
+        current_page_size = min(actual_limit, page_size)
+
         payload = {
             "q": q,
-            "pagination": {"offset": offset, "limit": page_size}
+            "pagination": {"offset": offset, "limit": current_page_size}
         }
         if fields:
             payload["fields"] = fields
@@ -571,9 +618,8 @@ def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
         delay = 1
         for attempt in range(max_retries):
             try:
-                print(f"🔍 Fetching USPTO page with offset={offset}, limit={page_size}")
                 resp = requests.post(SEARCH_URL, json=payload, headers=headers, timeout=(5, 30))
-                print(f"✅ Got response: status={resp.status_code}")
+                #print(f"✅ Got response: status={resp.status_code}")
 
                 if resp.status_code == 429:
                     print(f"⚠️ Rate limited, sleeping {delay}s")
@@ -583,10 +629,9 @@ def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
 
                 if resp.status_code == 404:
                     print(f"❌ 404 Not Found for query: {q}")
-                    return 0, []  # allow graceful fallback
-                
-                resp.raise_for_status()
+                    return 0, []
 
+                resp.raise_for_status()
                 break
             except Exception as e:
                 print(f"❌ Attempt {attempt+1} failed: {e}")
@@ -599,7 +644,6 @@ def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
             data = resp.json()
         except json.JSONDecodeError as e:
             print(f"❌ JSON decode error: {e}")
-            print(f"❌ Raw response: {resp.text[:500]}")
             raise
 
         if "patentFileWrapperDataBag" not in data:
@@ -609,13 +653,18 @@ def fetch_all_pages(q, fields=None, limit=None, fetch_one_page_only=False):
         all_pfws.extend(pfws)
         total = data.get("count", 0)
 
-        if fetch_one_page_only or len(all_pfws) >= total:
-            if len(all_pfws) != total:
-                print(f"⚠️ Mismatch: Expected {total} results but accumulated {len(all_pfws)}")
-            print(f"✅ Returning {len(all_pfws)} results of expected {total}")
-            return total, all_pfws
+        offset += current_page_size
 
-        offset += page_size
+        if len(all_pfws) >= total:
+            print(f"✅ Reached end of available results: {len(all_pfws)} of {total}")
+            break
+
+        if limit is not None and len(all_pfws) >= limit:
+            print(f"✅ Reached user-defined limit: {limit} (available: {total})")
+            break
+
+    return  (total, all_pfws)
+
 
 #Retreives list of PTAB documents for a given proceeding and populates them in returned docs
 def get_ptab_documents(proceeding_number):
@@ -683,35 +732,6 @@ def search_ptab_by_id(id, all=False):
             continue
 
     return proceedings
-
-# def search_ptab_by_id(id):    
-#     url_fields = ["patentNumber", "applicationNumberText", "proceedingNumber","patentOwnerName", "partyName"]
-#     proceedings = []
-
-#     for field in url_fields:
-#         try:
-#             url = f"https://developer.uspto.gov/ptab-api/proceedings?{field}={id}&recordTotalQuantity=1000"
-#             resp = requests.get(url, headers={"accept": "application/json"}, timeout=(5, 30))
-#             resp.raise_for_status()
-#             results = resp.json().get("results", [])
-#             for r in results:
-#                 proceedings.append({
-#                     "number": r.get("proceedingNumber"),
-#                     "status": r.get("proceedingStatusCategory"),
-#                     "petitioner": r.get("petitionerPartyName"),
-#                     "filing_date": r.get("proceedingFilingDate"),
-#                     "ptab_patent_number": r.get("respondentPatentNumber"),
-#                     "ptab_application_number": r.get("respondentApplicationNumberText"),
-#                     "ptab_patent_owner": r.get("respondentPartyName"),
-#                 })
-            
-#             if proceedings:
-#                 break
-#         except Exception as e:
-#             print(f"PTAB fetch error using field={field}; id={id}: {e}")
-#             continue
-
-#     return proceedings
 
 #Logic to handle download and OCR of patent using headless browswer since
 #no PDF API that doesn't require huge TAR download
@@ -913,12 +933,10 @@ def csv_download():
             "applicationMetaData.earliestPublicationDate",
             "patentTermAdjustmentData.adjustmentTotalQuantity",
         ]
-
         total, pfws = fetch_all_pages(
             search_term,
             fields=fields,
-            limit=100,
-            fetch_one_page_only=False
+            limit=None
         )
 
         si = StringIO()
@@ -972,36 +990,174 @@ def csv_download():
         return f"Unexpected error: {e}", 500
 
 # MISC Helper Functions
-def gather_family_tree(start_app_number, seen=None):
+
+# ✅ PATCH: Replace gather_family_tree to use new continuity endpoint with improved error handling and bag caching
+
+def gather_family_tree(start_app_number, seen=None, depth=0, max_depth=40):
     """
-    Recursively walks continuity tree to collect all related applications.
-    Returns a dict: {app_number: pfw_object}
+    Recursively walks continuity tree using the dedicated USPTO continuity API:
+    GET /patent/applications/[application_number]/continuity
+    Returns a dict: {app_number: {"bag": ..., "parents": [...], "children": [...]}}
     """
     if seen is None:
         seen = {}
 
+    if depth > max_depth:
+        raise RecursionError(f"🔁 Max depth {max_depth} exceeded while traversing from {start_app_number}")
+
     if start_app_number in seen:
-        return seen  # already visited
+        return seen
+
+    url = f"https://api.uspto.gov/api/v1/patent/applications/{start_app_number}/continuity"
+    headers = {
+        "accept": "application/json",
+        "X-API-KEY": API_KEY,
+    }
+
+    max_retries = 4
+    delay = 1
+
+    for attempt in range(max_retries):
+        try:
+            #print(f"Checking: {url}")
+            resp = requests.get(url, headers=headers, timeout=(5, 30))
+            resp.raise_for_status()
+            break
+        except requests.HTTPError as e:
+            if resp.status_code == 429:
+                print(f"⚠️ Rate limited on {start_app_number}, sleeping {delay}s")
+                time.sleep(delay)
+                delay *= 2
+                continue
+            elif resp.status_code == 404:
+                print(f"⚠️ Application {start_app_number} not found, skipping.")
+                seen[start_app_number] = {"bag": {}, "parents": [], "children": []}
+                return seen
+            raise
+        except Exception as e:
+            print(f"⚠️ Error in gather_family_tree({start_app_number}): {e}")
+            seen[start_app_number] = {"bag": {}, "parents": [], "children": []}
+            return seen
+    else:
+        raise Exception(f"❌ Failed to fetch continuity for {start_app_number} after {max_retries} attempts")
 
     try:
-        _, pfws = fetch_all_pages(f"applicationNumberText:{start_app_number}", fetch_one_page_only=True)
-        if not pfws:
-            return seen
-
-        pfw = pfws[0]
-        seen[start_app_number] = pfw
-
-        # Look at both parents and children
-        for rel in pfw.get("parentContinuityBag", []) + pfw.get("childContinuityBag", []):
-            for key in ["parentApplicationNumberText", "childApplicationNumberText"]:
-                app_no = rel.get(key)
-                if app_no and app_no not in seen:
-                    gather_family_tree(app_no, seen)
-
-        return seen
+        data = resp.json()
     except Exception as e:
-        print(f"⚠️ Error in gather_family_tree({start_app_number}): {e}")
+        print(f"⚠️ JSON decode error: {e}")
+        seen[start_app_number] = {"bag": {}, "parents": [], "children": []}
         return seen
+
+    bags = data.get("patentFileWrapperDataBag", [])
+    if not bags:
+        seen[start_app_number] = {"bag": {}, "parents": [], "children": []}
+        return seen
+
+    bag = bags[0]
+    parents = bag.get("parentContinuityBag", [])
+    children = bag.get("childContinuityBag", [])
+
+    seen[start_app_number] = {
+        "bag": bag,
+        "parents": parents,
+        "children": children,
+    }
+
+    for rel in parents:
+        app_no = rel.get("parentApplicationNumberText")
+        if app_no and app_no not in seen:
+            gather_family_tree(app_no, seen, depth + 1, max_depth)
+
+    for rel in children:
+        app_no = rel.get("childApplicationNumberText")
+        if app_no and app_no not in seen:
+            gather_family_tree(app_no, seen, depth + 1, max_depth)
+
+    if depth == 0:
+        print(f"✅ Finished family tree for {start_app_number}, total apps collected: {len(seen)}")
+
+    return seen
+
+
+# def gather_family_tree(start_app_number, seen=None, depth=0, max_depth=50):
+#     """
+#     Recursively walks continuity tree using the dedicated USPTO continuity API:
+#     GET /patent/applications/[application_number]/continuity
+#     Returns a dict: {app_number: {"parents": [...], "children": [...]}}
+#     """
+#     if seen is None:
+#         seen = {}
+
+#     if depth > max_depth:
+#         raise RecursionError(f"🔁 Max depth {max_depth} exceeded while traversing from {start_app_number}")
+
+#     if start_app_number in seen:
+#         return seen
+
+#     url = f"https://api.uspto.gov/api/v1/patent/applications/{start_app_number}/continuity"
+#     headers = {
+#         "accept": "application/json",
+#         "X-API-KEY": API_KEY,
+#     }
+
+#     max_retries = 4
+#     delay = 1
+
+#     for attempt in range(max_retries):
+#         try:
+#             print(f"Checking: {url}")
+#             resp = requests.get(url, headers=headers, timeout=(5, 30))
+#             resp.raise_for_status()
+#             break
+#         except requests.HTTPError as e:
+#             if resp.status_code == 429:
+#                 print(f"⚠️ Rate limited on {start_app_number}, sleeping {delay}s")
+#                 time.sleep(delay)
+#                 delay *= 2
+#                 continue
+#             elif resp.status_code == 404:
+#                 print(f"⚠️ Application {start_app_number} not found, skipping.")
+#                 seen[start_app_number] = {"parents": [], "children": []}  # ✅ cache not found
+#                 return seen
+#             raise
+#         except Exception as e:
+#             print(f"⚠️ Error in gather_family_tree({start_app_number}): {e}")
+#             raise
+#     else:
+#         raise Exception(f"❌ Failed to fetch continuity for {start_app_number} after {max_retries} attempts")
+
+#     data = resp.json()
+#     bags = data.get("patentFileWrapperDataBag", [])
+#     if not bags:
+#         seen[start_app_number] = {"parents": [], "children": []}
+#         return seen
+
+#     bag = bags[0]
+#     parents = bag.get("parentContinuityBag", [])
+#     children = bag.get("childContinuityBag", [])
+
+#     seen[start_app_number] = {
+#         "parents": parents,
+#         "children": children,
+#     }
+
+#     # Recursively explore parents and children
+#     for rel in parents:
+#         app_no = rel.get("parentApplicationNumberText")
+#         if app_no and app_no not in seen:
+#             gather_family_tree(app_no, seen, depth + 1, max_depth)
+
+#     for rel in children:
+#         app_no = rel.get("childApplicationNumberText")
+#         if app_no and app_no not in seen:
+#             gather_family_tree(app_no, seen, depth + 1, max_depth)
+
+#     if depth == 0:
+#         print(f"✅ Finished family tree for {start_app_number}, total apps collected: {len(seen)}")
+
+#     return seen
+
+
 
 def sort_family_members(members):
     def sort_key(member):
