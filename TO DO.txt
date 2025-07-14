@@ -5,3 +5,5 @@ Not yet fixed:
     -Store progress logs in a file or memory
     -Client polls /progress/<patent_number> every few seconds
     -When PDF download or OCR is done, redirect to the cached PDF
+2/ Getting different behavior on structured vs unstructured searches
+    -e.g. 6708213
